@@ -1,0 +1,10 @@
+[package]
+name = "plotting"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+eframe = "0.18.0"
+rfd = { version = "0.8.4", default-features = false, features = ["xdg-portal"] }
