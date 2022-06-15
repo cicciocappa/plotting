@@ -47,6 +47,9 @@ struct MyApp {
    min: String,
    sec: String,
    name: String,
+   event_regression: Vec<Value>,
+   interp_regression: Vec<Value>,
+
 }
 
 impl MyApp {
@@ -115,6 +118,9 @@ impl MyApp {
          .iter()
          .map(|p| Value::new(p.x, PolynomialRegression::predict_y(&terms, p.x as f64)))
          .collect();
+      for ev in self.events.iter(){
+         // calcolo le regressioni parziali...
+      }   
    }
 }
 
@@ -138,14 +144,17 @@ impl Default for MyApp {
          min: String::new(),
          sec: String::new(),
          name: String::new(),
-        // event_regression: Vec::new(),
-        // interp_regression: Vec::new(),
+         event_regression: Vec::new(),
+         interp_regression: Vec::new(),
       }
    }
 }
 
 impl eframe::App for MyApp {
-   fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+      if egui::InputState::key_down(&ctx.input(), egui::Key::Escape) {
+         frame.quit();
+      }
       egui::SidePanel::right("controlli").show(ctx, |ui| {
          ui.add_space(10.0);
          //let stroke = egui::Stroke {width:4.0, color:egui::Color32::from_rgb(0xff, 0x00, 0x00)};
@@ -298,7 +307,6 @@ impl eframe::App for MyApp {
                if self.show_data {
                   plot_ui.points(punti);
                }
-               
                if self.show_regression {
                   plot_ui.line(reg);
                }
