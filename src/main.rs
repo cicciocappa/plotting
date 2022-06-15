@@ -5,7 +5,7 @@ mod polyregres;
 use polyregres::{DataPoint, PolynomialRegression};
 
 use eframe::egui;
-use egui::plot::{Line, Plot, Points, Value, Values};
+use egui::plot::{Line, LineStyle, Plot, Points, VLine, Value, Values};
 use std::io::BufRead;
 
 fn main() {
@@ -26,7 +26,7 @@ struct Point {
 
 struct Event {
    time: u32,
-   name: String,
+   label: String,
 }
 
 struct MyApp {
@@ -38,6 +38,7 @@ struct MyApp {
    min_fq: u32,
    max_fq: u32,
    delta: u32,
+   show_data: bool,
    show_regression: bool,
    show_by_event: bool,
    show_interpolated: bool,
@@ -97,11 +98,11 @@ impl MyApp {
    }
 
    fn calculate_regression(&mut self) {
-      
       let grado = self.regression_grade.parse::<usize>().unwrap_or(1);
       let data = self
          .data
          .iter()
+         .filter(|p| p.y >= self.min_fq && p.y <= self.max_fq)
          .map(|p| DataPoint {
             x: p.x as f64,
             y: p.y as f64,
@@ -112,7 +113,7 @@ impl MyApp {
       self.regression = self
          .data
          .iter()
-         .map(|p| Value::new(p.x, PolynomialRegression::predictY(&terms, p.x as f64)))
+         .map(|p| Value::new(p.x, PolynomialRegression::predict_y(&terms, p.x as f64)))
          .collect();
    }
 }
@@ -128,6 +129,7 @@ impl Default for MyApp {
          delta: 0,
          min_limit_fq: 0,
          max_limit_fq: 100,
+         show_data: true,
          show_regression: false,
          show_by_event: false,
          show_interpolated: false,
@@ -136,7 +138,8 @@ impl Default for MyApp {
          min: String::new(),
          sec: String::new(),
          name: String::new(),
-
+        // event_regression: Vec::new(),
+        // interp_regression: Vec::new(),
       }
    }
 }
@@ -168,13 +171,20 @@ impl eframe::App for MyApp {
                .changed()
             {
                // ricalcolo regressione...
+               self.calculate_regression();
             };
             ui.end_row();
             ui.label("Max:");
-            ui.add(
-               egui::Slider::new(&mut self.max_fq, self.min_limit_fq..=self.max_limit_fq)
-                  .show_value(false),
-            );
+            if ui
+               .add(
+                  egui::Slider::new(&mut self.max_fq, self.min_limit_fq..=self.max_limit_fq)
+                     .show_value(false),
+               )
+               .changed()
+            {
+               // ricalcolo regressione...
+               self.calculate_regression();
+            };
             ui.end_row();
             ui.label("Delta:");
             ui.add(egui::Slider::new(&mut self.delta, 0..=100).show_value(false));
@@ -184,6 +194,7 @@ impl eframe::App for MyApp {
          ui.separator();
          ui.heading("Regressione");
          //ui.add_space(10.0);
+         ui.checkbox(&mut self.show_data, "Misura");
          ui.horizontal(|ui| {
             ui.checkbox(&mut self.show_regression, "Globale di grado");
             let response = ui.add(egui::TextEdit::singleline(&mut self.regression_grade));
@@ -193,7 +204,6 @@ impl eframe::App for MyApp {
                if self.regression_grade.len() > 2 {
                   self.regression_grade.pop();
                }
-              
                self.calculate_regression();
             }
             //if response.lost_focus() && ui.input().key_pressed(egui::Key::Enter) {
@@ -210,25 +220,65 @@ impl eframe::App for MyApp {
 
             if ui.add_sized([70.0, 25.0], button).clicked() {
                // imposta gli eventi di default
+               self.events = vec![
+                  Event {
+                     label: String::from("12:30 anticorpo"),
+                     time: 750,
+                  },
+                  Event {
+                     label: String::from("19:00 bsa"),
+                     time: 19 * 60 + 30,
+                  },
+                  Event {
+                     label: String::from("25:30 antigene"),
+                     time: 25 * 60 + 30,
+                  },
+               ]
             }
          });
 
-         egui::Grid::new("eventi").show(ui, |ui| {});
+         let mut del = 1000000;
+         for ev in self.events.iter() {
+            ui.horizontal(|ui| {
+               if ui.button("X").clicked() {
+                  del = ev.time;
+               };
+               ui.label(&ev.label);
+            });
+         }
+         if del != 1000000 {
+            self.events.retain(|e| e.time != del);
+         }
+
          ui.horizontal(|ui| {
             // ui.text_edit_singleline(&mut self.min);
-           // ui.add_sized([40.0, 20.0], egui::TextEdit::singleline::new(&mut self.min));
-            ui.add_sized([40.0,20.0], egui::TextEdit::singleline(&mut self.min));
+            // ui.add_sized([40.0, 20.0], egui::TextEdit::singleline::new(&mut self.min));
+            ui.add_sized([40.0, 20.0], egui::TextEdit::singleline(&mut self.min));
             ui.label(":");
-            ui.add_sized([40.0,20.0], egui::TextEdit::singleline(&mut self.sec));
-            ui.add_sized([80.0,20.0], egui::TextEdit::singleline(&mut self.name));
-            if ui.button("add").clicked(){
-
+            ui.add_sized([40.0, 20.0], egui::TextEdit::singleline(&mut self.sec));
+            ui.add_sized([80.0, 20.0], egui::TextEdit::singleline(&mut self.name));
+            if ui.button("add").clicked() {
+               let min: u32 = self.min.parse().unwrap_or(0);
+               let sec: u32 = self.sec.parse().unwrap_or(0);
+               let label = format!(
+                  "{}:{:02} {}",
+                  min,
+                  sec,
+                  if self.name.is_empty() {
+                     String::from("Event")
+                  } else {
+                     self.name.clone()
+                  }
+               );
+               self.events.push(Event {
+                  label,
+                  time: min * 60 + sec,
+               });
+               self.min = String::from("0");
+               self.sec = String::from("0");
+               self.name = String::new();
             }
          });
-
-
-
-
       });
 
       egui::CentralPanel::default().show(ctx, |ui| {
@@ -240,13 +290,25 @@ impl eframe::App for MyApp {
                .map(|p| Value::new(p.x, p.y));
             let reg = Line::new(Values::from_values_iter(
                self.regression.iter().map(|p| Value::new(p.x, p.y)),
-            )).width(4.0);
-            let punti = Points::new(Values::from_values_iter(serie)).radius(4.0);
-            let p = Plot::new("my_plot");
+            ))
+            .width(4.0);
+            let punti = Points::new(Values::from_values_iter(serie)).radius(2.0);
+            let p = Plot::new("my_plot").legend(egui::widgets::plot::Legend::default());
             p.show(ui, |plot_ui| {
-               plot_ui.points(punti);
+               if self.show_data {
+                  plot_ui.points(punti);
+               }
+               
                if self.show_regression {
                   plot_ui.line(reg);
+               }
+               for ev in self.events.iter() {
+                  plot_ui.vline(
+                     VLine::new(ev.time as f64)
+                        .width(3.0)
+                        .name(&ev.label)
+                        .style(LineStyle::Dashed { length: 3.0 }),
+                  );
                }
             });
          }
