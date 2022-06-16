@@ -99,12 +99,12 @@ mod matrix {
 }
 
 pub type Matrix = Vec<Vec<f64>>;
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct DataPoint {
     pub x: f64,
     pub y: f64,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PolynomialRegression {
     pub data: Vec<DataPoint>,
     pub degree: usize,

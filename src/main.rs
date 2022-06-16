@@ -49,7 +49,6 @@ struct MyApp {
    name: String,
    event_regression: Vec<Value>,
    interp_regression: Vec<Value>,
-
 }
 
 impl MyApp {
@@ -102,7 +101,7 @@ impl MyApp {
 
    fn calculate_regression(&mut self) {
       let grado = self.regression_grade.parse::<usize>().unwrap_or(1);
-      let data = self
+      let data: Vec<DataPoint> = self
          .data
          .iter()
          .filter(|p| p.y >= self.min_fq && p.y <= self.max_fq)
@@ -111,16 +110,38 @@ impl MyApp {
             y: p.y as f64,
          })
          .collect();
-      let mut poly = PolynomialRegression::new(data, grado);
+      let mut poly = PolynomialRegression::new(data.clone(), grado);
       let terms = poly.get_terms();
       self.regression = self
          .data
          .iter()
          .map(|p| Value::new(p.x, PolynomialRegression::predict_y(&terms, p.x as f64)))
          .collect();
-      for ev in self.events.iter(){
-         // calcolo le regressioni parziali...
-      }   
+      if self.events.len() > 0 {
+         self.event_regression.clear();
+         let mut tempi = Vec::new();
+         tempi.push(0.0_f64);
+         for ev in self.events.iter() {
+            tempi.push(ev.time as f64);
+         }
+         tempi.push(data[data.len()-1].x);
+         for i in 1..tempi.len() {
+            // calcolo le regressioni parziali...
+            let t1 = tempi[i - 1];
+            let t2 = tempi[i];
+            let intervallo: Vec<DataPoint> = data
+               .clone()
+               .into_iter()
+               .filter(|d| d.x >= t1 && d.x <= t2)
+               .collect();
+            let sx = intervallo[0].x;
+            let ex = intervallo[intervallo.len()-1].x;   
+            let mut model = PolynomialRegression::new(intervallo, 1);
+            let terms = model.get_terms();
+            self.event_regression.push(Value{x:sx,y:PolynomialRegression::predict_y(&terms,sx)});
+            self.event_regression.push(Value{x:ex,y:PolynomialRegression::predict_y(&terms,ex)});
+         }
+      }
    }
 }
 
@@ -242,7 +263,8 @@ impl eframe::App for MyApp {
                      label: String::from("25:30 antigene"),
                      time: 25 * 60 + 30,
                   },
-               ]
+               ];
+               self.calculate_regression();
             }
          });
 
@@ -257,6 +279,7 @@ impl eframe::App for MyApp {
          }
          if del != 1000000 {
             self.events.retain(|e| e.time != del);
+            self.calculate_regression();
          }
 
          ui.horizontal(|ui| {
@@ -286,6 +309,7 @@ impl eframe::App for MyApp {
                self.min = String::from("0");
                self.sec = String::from("0");
                self.name = String::new();
+               self.calculate_regression();
             }
          });
       });
@@ -301,6 +325,7 @@ impl eframe::App for MyApp {
                self.regression.iter().map(|p| Value::new(p.x, p.y)),
             ))
             .width(4.0);
+            let ereg = Line::new(Values::from_values(self.event_regression.clone())).width(4.0);
             let punti = Points::new(Values::from_values_iter(serie)).radius(2.0);
             let p = Plot::new("my_plot").legend(egui::widgets::plot::Legend::default());
             p.show(ui, |plot_ui| {
@@ -309,6 +334,9 @@ impl eframe::App for MyApp {
                }
                if self.show_regression {
                   plot_ui.line(reg);
+               }
+               if self.show_by_event {
+                  plot_ui.line(ereg);
                }
                for ev in self.events.iter() {
                   plot_ui.vline(
